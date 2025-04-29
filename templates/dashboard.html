@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Live Bus Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        #map { height: 70vh; width: 100%; }
+        body { font-family: sans-serif; padding: 1rem; }
+        .leaflet-popup-content input {
+            width: 90%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Live Bus Tracker Dashboard</h1>
+    <div id="map"></div>
+    <br>
+    <a href="{{ url_for('logout') }}">Logout</a>
+
+    <!-- Libraries -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+
+    <!-- Map + Marker Logic -->
+    <script>
+        const map = L.map('map').setView([17.6034937425493, 78.48695051843427], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        const socket = io(window.location.origin);
+        let markers = {};
+
+        {% for loc in locations %}
+        markers[{{ loc.id }}] = L.marker([{{ loc.lat }}, {{ loc.lng }}], {
+            icon: L.divIcon({
+                className: 'leaflet-div-icon',
+                html: '🚌',
+                iconSize: [30, 30]
+            })
+        }).addTo(map)
+        .bindPopup(`
+            <b>Bus Number:</b> {% if loc.is_locked %}
+                {{ loc.bus_number }}
+            {% else %}
+                <input type='text' id='bus-number-{{ loc.id }}' value='{{ loc.bus_number }}' />
+            {% endif %}<br>
+        
+            <b>Route Name:</b> {% if loc.is_locked %}
+                {{ loc.route_name }}
+            {% else %}
+                <input type='text' id='route-name-{{ loc.id }}' value='{{ loc.route_name }}' />
+            {% endif %}<br>
+
+            <b>Current Location:</b> {{ loc.name }}
+
+            {% if not loc.is_locked %}
+                <br><button onclick='saveChanges({{ loc.id }})'>Save</button>
+            {% endif %}
+        `);
+        {% endfor %}
+
+        // Adjust the map bounds to fit all markers
+        const bounds = new L.LatLngBounds(Object.values(markers).map(m => m.getLatLng()));
+        map.fitBounds(bounds);
+
+        function saveChanges(id) {
+            const busNumber = document.getElementById(`bus-number-${id}`)?.value;
+            const routeName = document.getElementById(`route-name-${id}`)?.value;
+
+            if (!busNumber || !routeName) {
+                alert('Both Bus Number and Route Name are required.');
+                return;
+            }
+
+            socket.emit('edit_name', {
+                id: id,
+                new_bus_number: busNumber,
+                new_route_name: routeName
+            });
+        }
+
+        // Socket.IO listeners
+        socket.on('update_marker', data => {
+            if (markers[data.id]) {
+                markers[data.id].setLatLng([data.lat, data.lng])
+                    .bindPopup(`
+                        <b>Bus Number:</b> ${data.new_bus_number || 'Unknown'}<br>
+                        <b>Route Name:</b> ${data.new_route_name || 'Unknown'}<br>
+                        <b>Current Location:</b> ${data.name}
+                    `);
+            }
+        });
+
+        socket.on('name_updated', data => {
+            if (markers[data.id]) {
+                markers[data.id].bindPopup(`
+                    <b>Bus Number:</b> ${data.new_bus_number}<br>
+                    <b>Route Name:</b> ${data.new_route_name}<br>
+                    <b>Current Location:</b> ${data.new_name}
+                `);
+                alert('Bus details updated and locked.');
+            }
+        });
+    </script>
+</body>
+</html>

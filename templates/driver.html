@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Driver Location Update</title>
+</head>
+<body>
+    <h1>Live Location Sharing</h1>
+    <p id="status">Waiting for location...</p>
+
+    <script>
+        const busId = new URLSearchParams(window.location.search).get("id") || 1;
+
+        function updateLocation(position) {
+            const data = {
+                id: parseInt(busId),
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+            };
+
+            fetch('/update_location', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            }).then(response => {
+                if (!response.ok) {
+                    document.getElementById("status").innerText = `Error: ${response.statusText}`;
+                } else {
+                    document.getElementById("status").innerText =
+                        `Location sent: ${data.lat.toFixed(5)}, ${data.lng.toFixed(5)}`;
+                }
+            });
+        }
+
+        function handleError(error) {
+            let message = "Error getting location";
+            if (error.code === error.PERMISSION_DENIED) {
+                message = "Location access denied. Please enable location services.";
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+                message = "Location unavailable. Check your connection.";
+            } else if (error.code === error.TIMEOUT) {
+                message = "Location request timed out.";
+            }
+            document.getElementById("status").innerText = message;
+        }
+
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(updateLocation, handleError, {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 5000
+            });
+        } else {
+            document.getElementById("status").innerText = "Geolocation is not supported by this browser.";
+        }
+    </script>
+</body>
+</html>
